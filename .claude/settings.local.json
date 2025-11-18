@@ -8,7 +8,8 @@
       "Bash(vercel:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(bun run build:*)"
+      "Bash(bun run build:*)",
+      "Bash(bun add:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

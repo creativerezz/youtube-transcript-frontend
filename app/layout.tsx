@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { Plus_Jakarta_Sans, Lora, IBM_Plex_Mono } from "next/font/google"
 import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
+import { Analytics } from "@vercel/analytics/react"
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -38,6 +39,7 @@ export default function RootLayout({
       <body className="font-sans antialiased">
         {children}
         <Toaster />
+        <Analytics />
       </body>
     </html>
   )
