@@ -144,10 +144,10 @@ export const ConfirmationActions = ({
   className,
   ...props
 }: ConfirmationActionsProps) => {
-  const { state } = useConfirmation();
+  const { approval } = useConfirmation();
 
-  // Only show when approval is requested
-  if (state !== "approval-requested") {
+  // Only show when approval is requested (approval is defined but not yet approved/rejected)
+  if (!approval || approval.approved !== undefined) {
     return null;
   }
 
