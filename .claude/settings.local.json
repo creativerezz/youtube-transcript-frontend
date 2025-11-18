@@ -1,0 +1,14 @@
+{
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "shadcn",
+    "nuxt-ui",
+    "Better Auth",
+    "supabase"
+  ],
+  "permissions": {
+    "allow": [
+      "Bash(curl:*)"
+    ]
+  }
+}

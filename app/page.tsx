@@ -3,62 +3,55 @@
 import { useState } from "react"
 import { TranscriptFetcher } from "@/components/transcript-fetcher"
 import { TranscriptList } from "@/components/transcript-list"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Youtube } from "lucide-react"
 
 export default function HomePage() {
-  const [activeTab, setActiveTab] = useState("fetch")
   const [refreshKey, setRefreshKey] = useState(0)
 
   const handleTranscriptFetched = () => {
-    // Switch to library tab and refresh the list
-    setActiveTab("library")
     setRefreshKey((prev) => prev + 1)
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-accent/20">
-      <div className="container mx-auto px-4 py-8 max-w-6xl">
+    <div className="min-h-screen bg-gradient-to-b from-background to-card">
+      <div className="container mx-auto px-4 py-12 max-w-5xl">
         {/* Header */}
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="p-3 bg-primary/10 rounded-xl">
-              <Youtube className="h-10 w-10 text-primary" />
+        <div className="text-center mb-16">
+          <div className="flex items-center justify-center gap-3 mb-6">
+            <div className="p-3 bg-primary/15 rounded-2xl border border-primary/20">
+              <Youtube className="h-8 w-8 text-primary" />
             </div>
           </div>
-          <h1 className="text-4xl font-bold mb-2">
-            YouTube Transcript Storage
+          <h1 className="text-4xl md:text-5xl font-bold mb-3 text-foreground tracking-tight">
+            YouTube Transcripts
           </h1>
-          <p className="text-muted-foreground text-lg">
-            Fetch, store, and manage YouTube transcripts with lightning-fast caching
+          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+            Fetch and manage video transcripts with fast, reliable caching
           </p>
         </div>
 
-        {/* Main Content */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full max-w-md mx-auto grid-cols-2">
-            <TabsTrigger value="fetch">Fetch Transcript</TabsTrigger>
-            <TabsTrigger value="library">Library</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="fetch" className="space-y-4">
+        {/* Two Column Layout */}
+        <div className="grid lg:grid-cols-3 gap-6 mb-8">
+          {/* Fetch Column */}
+          <div className="lg:col-span-1">
             <TranscriptFetcher onTranscriptFetched={handleTranscriptFetched} />
-          </TabsContent>
+          </div>
 
-          <TabsContent value="library" className="space-y-4">
+          {/* Library Column */}
+          <div className="lg:col-span-2">
             <TranscriptList key={refreshKey} />
-          </TabsContent>
-        </Tabs>
+          </div>
+        </div>
 
         {/* Footer */}
-        <div className="mt-12 text-center text-sm text-muted-foreground">
+        <div className="text-center text-sm text-muted-foreground border-t border-border/50 pt-8">
           <p>
             Powered by{" "}
             <a
               href="https://youtube-transcript-storage.automatehub.workers.dev"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-primary hover:underline"
+              className="font-medium text-primary hover:text-primary transition-colors"
             >
               Cloudflare Workers
             </a>
@@ -67,9 +60,9 @@ export default function HomePage() {
               href="https://fetch.youtubesummaries.cc"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-primary hover:underline"
+              className="font-medium text-primary hover:text-primary transition-colors"
             >
-              YouTube API Server
+              YouTube API
             </a>
           </p>
         </div>

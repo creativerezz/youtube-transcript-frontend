@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Image from "next/image"
 import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -89,9 +90,69 @@ ${transcript.timestamps.join('\n')}
     }
   }
 
+  // Parse captions into paragraphs for better readability
+  const parseCaptions = (captions: string): string[] => {
+    // Split by double newlines first (natural paragraphs)
+    const naturalParagraphs = captions.split(/\n\n+/)
+
+    // If we have natural paragraphs, use them
+    if (naturalParagraphs.length > 1) {
+      return naturalParagraphs.filter(p => p.trim().length > 0)
+    }
+
+    // Otherwise, split into chunks of ~3-5 sentences for readability
+    const sentences = captions.split(/([.!?]+\s+)/)
+    const paragraphs: string[] = []
+    let currentParagraph = ''
+    let sentenceCount = 0
+
+    for (let i = 0; i < sentences.length; i += 2) {
+      const sentence = sentences[i] + (sentences[i + 1] || '')
+      currentParagraph += sentence
+      sentenceCount++
+
+      // Create a new paragraph after 3-5 sentences
+      if (sentenceCount >= 4 || i >= sentences.length - 2) {
+        if (currentParagraph.trim()) {
+          paragraphs.push(currentParagraph.trim())
+        }
+        currentParagraph = ''
+        sentenceCount = 0
+      }
+    }
+
+    return paragraphs.length > 0 ? paragraphs : [captions]
+  }
+
+  // Parse timestamp entries for better display
+  interface TimestampEntry {
+    time: string
+    text: string
+    seconds: number
+  }
+
+  const parseTimestamps = (timestamps: string[]): TimestampEntry[] => {
+    return timestamps.map(ts => {
+      // Match format like "[00:00:15] text" or "00:00:15 text"
+      const match = ts.match(/\[?(\d{2}:\d{2}:\d{2})\]?\s*(.*)/)
+      if (match) {
+        const [, time, text] = match
+        const [hours, minutes, seconds] = time.split(':').map(Number)
+        const totalSeconds = hours * 3600 + minutes * 60 + seconds
+        return { time, text, seconds: totalSeconds }
+      }
+      return { time: '00:00:00', text: ts, seconds: 0 }
+    })
+  }
+
+  const jumpToTimestamp = (seconds: number) => {
+    const youtubeUrl = `https://www.youtube.com/watch?v=${transcript?.video_id}&t=${seconds}s`
+    window.open(youtubeUrl, '_blank')
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-background via-background to-accent/20 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin text-muted-foreground" />
       </div>
     )
@@ -104,45 +165,56 @@ ${transcript.timestamps.join('\n')}
   const youtubeUrl = `https://www.youtube.com/watch?v=${transcript.video_id}`
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-accent/20">
+    <div className="min-h-screen bg-gradient-to-b from-background to-card">
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         {/* Back Button */}
         <Link href="/">
-          <Button variant="ghost" className="mb-6">
-            <ArrowLeft className="h-4 w-4" />
+          <Button variant="ghost" className="mb-8 text-primary hover:bg-primary/10">
+            <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Home
           </Button>
         </Link>
 
         {/* Video Info Card */}
-        <Card className="mb-6">
-          <CardHeader>
+        <Card className="mb-6 border-border/60 bg-card/50 backdrop-blur-sm">
+          <CardHeader className="bg-gradient-to-r from-primary/5 to-accent/5">
             <div className="flex flex-col md:flex-row gap-4">
-              <img
-                src={transcript.thumbnail_url}
-                alt={transcript.title}
-                className="w-full md:w-64 h-auto object-cover rounded"
-              />
+              {transcript.thumbnail_url && (
+                <div className="relative w-full md:w-64 aspect-video rounded-lg overflow-hidden bg-black shrink-0">
+                  <Image
+                    src={transcript.thumbnail_url}
+                    alt={transcript.title}
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 768px) 100vw, 256px"
+                  />
+                </div>
+              )}
+              {!transcript.thumbnail_url && (
+                <div className="w-full md:w-64 aspect-video bg-muted rounded-lg border border-border/40 flex items-center justify-center shrink-0">
+                  <div className="text-sm text-muted-foreground">No thumbnail available</div>
+                </div>
+              )}
               <div className="flex-1">
-                <CardTitle className="text-2xl mb-2">{transcript.title}</CardTitle>
+                <CardTitle className="text-2xl mb-2 text-foreground">{transcript.title}</CardTitle>
                 <CardDescription className="space-y-1">
-                  <p className="text-base">{transcript.author_name}</p>
-                  <p className="text-sm">Video ID: {transcript.video_id}</p>
-                  <p className="text-sm">
+                  <span className="block text-base text-muted-foreground font-medium">{transcript.author_name}</span>
+                  <span className="block text-sm text-muted-foreground">Video ID: {transcript.video_id}</span>
+                  <span className="block text-sm text-muted-foreground">
                     Created: {new Date(transcript.created_at).toLocaleString()}
-                  </p>
-                  <p className="text-sm">
+                  </span>
+                  <span className="block text-sm text-muted-foreground">
                     Updated: {new Date(transcript.updated_at).toLocaleString()}
-                  </p>
+                  </span>
                 </CardDescription>
                 <div className="flex gap-2 mt-4">
                   <a href={youtubeUrl} target="_blank" rel="noopener noreferrer">
-                    <Button variant="outline" size="sm">
+                    <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
                       <ExternalLink className="h-4 w-4" />
                       Watch on YouTube
                     </Button>
                   </a>
-                  <Button variant="outline" size="sm" onClick={downloadTranscript}>
+                  <Button variant="outline" size="sm" onClick={downloadTranscript} className="border-border/60 hover:bg-accent/50">
                     <Download className="h-4 w-4" />
                     Download
                   </Button>
@@ -153,16 +225,16 @@ ${transcript.timestamps.join('\n')}
         </Card>
 
         {/* Transcript Content */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Transcript</CardTitle>
+        <Card className="border-border/60 bg-card/50 backdrop-blur-sm">
+          <CardHeader className="bg-gradient-to-r from-accent/5 to-primary/5">
+            <CardTitle className="text-foreground">Transcript</CardTitle>
             <CardDescription>
               Full transcript with captions and timestamps
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="captions">
-              <TabsList className="grid w-full max-w-md grid-cols-2">
+              <TabsList className="grid w-full max-w-md grid-cols-2 bg-muted/40 border border-border/40">
                 <TabsTrigger value="captions">Captions</TabsTrigger>
                 <TabsTrigger value="timestamps">Timestamps</TabsTrigger>
               </TabsList>
@@ -173,6 +245,7 @@ ${transcript.timestamps.join('\n')}
                     variant="outline"
                     size="sm"
                     onClick={() => copyToClipboard(transcript.captions)}
+                    className="border-border/60 hover:bg-primary/10 text-primary"
                   >
                     {copied ? (
                       <>
@@ -187,10 +260,14 @@ ${transcript.timestamps.join('\n')}
                     )}
                   </Button>
                 </div>
-                <div className="bg-muted p-6 rounded-lg">
-                  <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
-                    {transcript.captions}
-                  </pre>
+                <div className="bg-muted/30 p-6 rounded-lg border border-border/40 text-foreground/80 max-h-[600px] overflow-y-auto">
+                  <div className="space-y-4 text-base leading-relaxed">
+                    {parseCaptions(transcript.captions).map((paragraph, index) => (
+                      <p key={index} className="text-foreground/90">
+                        {paragraph}
+                      </p>
+                    ))}
+                  </div>
                 </div>
               </TabsContent>
 
@@ -200,6 +277,7 @@ ${transcript.timestamps.join('\n')}
                     variant="outline"
                     size="sm"
                     onClick={() => copyToClipboard(transcript.timestamps.join('\n'))}
+                    className="border-border/60 hover:bg-primary/10 text-primary"
                   >
                     {copied ? (
                       <>
@@ -214,13 +292,19 @@ ${transcript.timestamps.join('\n')}
                     )}
                   </Button>
                 </div>
-                <div className="bg-muted p-6 rounded-lg space-y-2">
-                  {transcript.timestamps.map((timestamp, index) => (
+                <div className="bg-muted/30 p-6 rounded-lg border border-border/40 space-y-1 max-h-[600px] overflow-y-auto">
+                  {parseTimestamps(transcript.timestamps).map((entry, index) => (
                     <div
                       key={index}
-                      className="text-sm font-mono leading-relaxed py-1 hover:bg-accent/50 px-2 rounded"
+                      onClick={() => jumpToTimestamp(entry.seconds)}
+                      className="flex items-start gap-3 py-2 px-3 hover:bg-primary/10 rounded cursor-pointer transition-colors group"
                     >
-                      {timestamp}
+                      <span className="text-xs font-mono text-primary font-semibold min-w-[65px] mt-0.5 group-hover:text-primary/80">
+                        {entry.time}
+                      </span>
+                      <span className="text-sm text-foreground/90 leading-relaxed flex-1">
+                        {entry.text}
+                      </span>
                     </div>
                   ))}
                 </div>

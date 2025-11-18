@@ -1,13 +1,23 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Artifact,
+  ArtifactHeader,
+  ArtifactTitle,
+  ArtifactDescription,
+  ArtifactContent,
+  ArtifactActions,
+  ArtifactAction,
+} from "@/components/ai-elements/artifact"
+import { Loader } from "@/components/ai-elements/loader"
 import { useToast } from "@/components/ui/use-toast"
 import { api, extractVideoId, type VideoTranscript } from "@/lib/api"
-import { Download, Loader2, Youtube } from "lucide-react"
+import { Download, RefreshCw, Youtube } from "lucide-react"
 
 interface TranscriptFetcherProps {
   onTranscriptFetched?: (transcript: VideoTranscript) => void
@@ -51,10 +61,10 @@ export function TranscriptFetcher({ onTranscriptFetched }: TranscriptFetcherProp
       onTranscriptFetched?.(response.data)
 
       toast({
-        title: response.cached ? "Transcript Retrieved" : "Transcript Fetched",
-        description: response.cached 
-          ? "Retrieved from cache" 
-          : "Successfully fetched and stored",
+        title: response.cached ? "Retrieved from cache" : "Transcript fetched",
+        description: response.cached
+          ? "Loaded instantly"
+          : "Successfully stored",
       })
     } catch (error) {
       toast({
@@ -94,28 +104,30 @@ ${transcript.timestamps.join('\n')}
 
     toast({
       title: "Downloaded",
-      description: "Transcript downloaded successfully",
+      description: "Transcript saved to file",
     })
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Youtube className="h-6 w-6 text-red-600" />
-          Fetch YouTube Transcript
-        </CardTitle>
-        <CardDescription>
-          Enter a YouTube URL or video ID to fetch and store the transcript
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <Artifact>
+      <ArtifactHeader className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-primary/20 rounded-lg border border-primary/30">
+            <Youtube className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <ArtifactTitle className="text-primary">Fetch Transcript</ArtifactTitle>
+            <ArtifactDescription>Enter a YouTube URL or ID</ArtifactDescription>
+          </div>
+        </div>
+      </ArtifactHeader>
+      <ArtifactContent className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="video-url">YouTube URL or Video ID</Label>
+          <Label htmlFor="video-url" className="text-sm font-medium">YouTube URL or Video ID</Label>
           <div className="flex gap-2">
             <Input
               id="video-url"
-              placeholder="https://youtu.be/dQw4w9WgXcQ or dQw4w9WgXcQ"
+              placeholder="https://youtu.be/... or video ID"
               value={videoUrl}
               onChange={(e) => setVideoUrl(e.target.value)}
               onKeyDown={(e) => {
@@ -123,77 +135,77 @@ ${transcript.timestamps.join('\n')}
                   handleFetch(false)
                 }
               }}
+              className="text-sm border-border/80 focus:border-primary/50"
             />
-            <Button 
-              onClick={() => handleFetch(false)} 
+            <Button
+              onClick={() => handleFetch(false)}
               disabled={loading}
-              className="whitespace-nowrap"
+              size="sm"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
             >
               {loading ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Fetching...
+                  <Loader size={14} className="mr-2" />
+                  Fetching
                 </>
               ) : (
                 "Fetch"
               )}
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            If the transcript is already cached, it will be retrieved instantly
-          </p>
         </div>
 
         {transcript && (
-          <div className="space-y-4 pt-4 border-t">
-            <div className="flex items-start gap-4">
-              <img
-                src={transcript.thumbnail_url}
-                alt={transcript.title}
-                className="w-32 h-20 object-cover rounded"
-              />
+          <div className="space-y-4 pt-4 border-t border-border/50">
+            <div className="flex gap-3 p-2.5 rounded-lg bg-secondary/30 border border-secondary/40">
+              {transcript.thumbnail_url && (
+                <Image
+                  src={transcript.thumbnail_url}
+                  alt={transcript.title}
+                  width={80}
+                  height={48}
+                  className="w-20 h-12 object-cover rounded flex-shrink-0"
+                />
+              )}
+              {!transcript.thumbnail_url && (
+                <div className="w-20 h-12 bg-muted rounded flex-shrink-0 flex items-center justify-center">
+                  <div className="text-xs text-muted-foreground">No image</div>
+                </div>
+              )}
               <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-sm leading-tight mb-1 line-clamp-2">
+                <h3 className="font-semibold text-sm leading-tight line-clamp-2 text-foreground">
                   {transcript.title}
                 </h3>
                 <p className="text-xs text-muted-foreground">
                   {transcript.author_name}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Video ID: {transcript.video_id}
-                </p>
               </div>
             </div>
 
             <div className="flex gap-2">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
                 onClick={() => handleFetch(true)}
                 disabled={loading}
+                className="border-border/60 hover:bg-accent/50"
               >
-                Force Refetch
+                <RefreshCw className="h-3.5 w-3.5" />
+                Refetch
               </Button>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
                 onClick={downloadTranscript}
+                className="border-border/60 hover:bg-accent/50"
               >
-                <Download className="h-4 w-4" />
+                <Download className="h-3.5 w-3.5" />
                 Download
               </Button>
             </div>
-
-            <div className="space-y-2">
-              <Label>Preview (First 500 characters)</Label>
-              <div className="bg-muted p-3 rounded text-xs font-mono whitespace-pre-wrap max-h-32 overflow-y-auto">
-                {transcript.captions.substring(0, 500)}
-                {transcript.captions.length > 500 && "..."}
-              </div>
-            </div>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </ArtifactContent>
+    </Artifact>
   )
 }
