@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   Artifact,
   ArtifactHeader,
@@ -13,22 +14,28 @@ import {
 import { Loader } from "@/components/ai-elements/loader"
 import { useToast } from "@/components/ui/use-toast"
 import { api, type VideoTranscript } from "@/lib/api"
-import { ChevronLeft, ChevronRight, Trash2, Eye } from "lucide-react"
+import { ChevronLeft, ChevronRight, Trash2, Eye, Search, X } from "lucide-react"
 import Link from "next/link"
 
 export function TranscriptList() {
   const [transcripts, setTranscripts] = useState<VideoTranscript[]>([])
+  const [allTranscripts, setAllTranscripts] = useState<VideoTranscript[]>([])
   const [loading, setLoading] = useState(true)
   const [limit] = useState(10)
   const [offset, setOffset] = useState(0)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
   const { toast } = useToast()
 
   const loadTranscripts = async () => {
     setLoading(true)
     try {
-      const response = await api.listTranscripts(limit, offset)
-      setTranscripts(response.transcripts)
+      // Load more transcripts for search (load 100 at a time)
+      const response = await api.listTranscripts(100, 0)
+      setAllTranscripts(response.transcripts)
+      // For pagination, still use the limit
+      const paginatedResponse = await api.listTranscripts(limit, offset)
+      setTranscripts(paginatedResponse.transcripts)
     } catch (error) {
       toast({
         title: "Error",
@@ -43,6 +50,21 @@ export function TranscriptList() {
   useEffect(() => {
     loadTranscripts()
   }, [offset])
+
+  // Filter transcripts based on search query
+  const filteredTranscripts = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return transcripts
+    }
+
+    const query = searchQuery.toLowerCase().trim()
+    return allTranscripts.filter(
+      (transcript) =>
+        transcript.title.toLowerCase().includes(query) ||
+        transcript.author_name.toLowerCase().includes(query) ||
+        transcript.video_id.toLowerCase().includes(query)
+    )
+  }, [searchQuery, transcripts, allTranscripts])
 
   const handleDelete = async (videoId: string) => {
     if (!confirm("Delete this transcript?")) {
@@ -83,25 +105,55 @@ export function TranscriptList() {
   return (
     <Artifact>
       <ArtifactHeader className="bg-gradient-to-r from-accent/10 via-accent/5 to-transparent">
-        <div>
+        <div className="w-full">
           <ArtifactTitle className="text-accent-foreground">Stored Transcripts</ArtifactTitle>
           <ArtifactDescription>Your cached videos</ArtifactDescription>
         </div>
       </ArtifactHeader>
-      <ArtifactContent className="space-y-2">
+      <ArtifactContent className="space-y-3">
+        {/* Search Input */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            type="text"
+            placeholder="Search by title, author, or video ID..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 pr-9 text-sm border-border/80 focus:border-primary/50"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Results */}
         {loading ? (
           <div className="flex items-center justify-center py-12 text-primary">
             <Loader size={20} />
           </div>
-        ) : transcripts.length === 0 ? (
+        ) : (searchQuery ? filteredTranscripts : transcripts).length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
-            <p className="text-sm">No transcripts yet</p>
-            <p className="text-xs mt-1">Fetch a video to get started</p>
+            <p className="text-sm">
+              {searchQuery ? "No transcripts found" : "No transcripts yet"}
+            </p>
+            <p className="text-xs mt-1">
+              {searchQuery ? "Try a different search term" : "Fetch a video to get started"}
+            </p>
           </div>
         ) : (
           <>
+            {searchQuery && (
+              <div className="text-xs text-muted-foreground pb-1">
+                Found {filteredTranscripts.length} result{filteredTranscripts.length !== 1 ? "s" : ""}
+              </div>
+            )}
             <div className="space-y-2">
-              {transcripts.map((transcript) => {
+              {(searchQuery ? filteredTranscripts : transcripts).map((transcript) => {
                 // Construct YouTube thumbnail URL from video ID
                 const thumbnailUrl = transcript.thumbnail_url || `https://i.ytimg.com/vi/${transcript.video_id}/hqdefault.jpg`
 
@@ -156,7 +208,7 @@ export function TranscriptList() {
               })}
             </div>
 
-            {(offset > 0 || transcripts.length === limit) && (
+            {!searchQuery && (offset > 0 || transcripts.length === limit) && (
               <div className="flex items-center justify-between pt-2 border-t border-border/50">
                 <Button
                   variant="ghost"

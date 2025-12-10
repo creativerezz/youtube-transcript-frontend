@@ -1,14 +1,15 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import Image from "next/image"
 import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/components/ui/use-toast"
 import { api, type VideoTranscript } from "@/lib/api"
-import { ArrowLeft, Download, Loader2, ExternalLink, Copy, Check } from "lucide-react"
+import { ArrowLeft, Download, Loader2, ExternalLink, Copy, Check, Search, X, ChevronUp, ChevronDown } from "lucide-react"
 import Link from "next/link"
 
 export default function TranscriptPage() {
@@ -18,6 +19,9 @@ export default function TranscriptPage() {
   const [transcript, setTranscript] = useState<VideoTranscript | null>(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [searchIndex, setSearchIndex] = useState(0)
+  const [searchMatches, setSearchMatches] = useState<number[]>([])
   const { toast } = useToast()
 
   useEffect(() => {
@@ -91,37 +95,58 @@ ${transcript.timestamps.join('\n')}
   }
 
   // Parse captions into paragraphs for better readability
-  const parseCaptions = (captions: string): string[] => {
+  const parseCaptions = (captions: string, highlightQuery?: string): Array<{ text: string; index: number }> => {
     // Split by double newlines first (natural paragraphs)
     const naturalParagraphs = captions.split(/\n\n+/)
 
+    let paragraphs: string[]
     // If we have natural paragraphs, use them
     if (naturalParagraphs.length > 1) {
-      return naturalParagraphs.filter(p => p.trim().length > 0)
-    }
+      paragraphs = naturalParagraphs.filter(p => p.trim().length > 0)
+    } else {
+      // Otherwise, split into chunks of ~3-5 sentences for readability
+      const sentences = captions.split(/([.!?]+\s+)/)
+      paragraphs = []
+      let currentParagraph = ''
+      let sentenceCount = 0
 
-    // Otherwise, split into chunks of ~3-5 sentences for readability
-    const sentences = captions.split(/([.!?]+\s+)/)
-    const paragraphs: string[] = []
-    let currentParagraph = ''
-    let sentenceCount = 0
+      for (let i = 0; i < sentences.length; i += 2) {
+        const sentence = sentences[i] + (sentences[i + 1] || '')
+        currentParagraph += sentence
+        sentenceCount++
 
-    for (let i = 0; i < sentences.length; i += 2) {
-      const sentence = sentences[i] + (sentences[i + 1] || '')
-      currentParagraph += sentence
-      sentenceCount++
-
-      // Create a new paragraph after 3-5 sentences
-      if (sentenceCount >= 4 || i >= sentences.length - 2) {
-        if (currentParagraph.trim()) {
-          paragraphs.push(currentParagraph.trim())
+        // Create a new paragraph after 3-5 sentences
+        if (sentenceCount >= 4 || i >= sentences.length - 2) {
+          if (currentParagraph.trim()) {
+            paragraphs.push(currentParagraph.trim())
+          }
+          currentParagraph = ''
+          sentenceCount = 0
         }
-        currentParagraph = ''
-        sentenceCount = 0
       }
     }
 
-    return paragraphs.length > 0 ? paragraphs : [captions]
+    return paragraphs.length > 0 
+      ? paragraphs.map((p, i) => ({ text: p, index: i }))
+      : [{ text: captions, index: 0 }]
+  }
+
+  // Highlight search query in text
+  const highlightText = (text: string, query: string): React.ReactNode => {
+    if (!query.trim()) return text
+
+    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
+    const parts = text.split(regex)
+    
+    return parts.map((part, i) => 
+      regex.test(part) ? (
+        <mark key={i} className="bg-primary/20 text-primary-foreground px-0.5 rounded">
+          {part}
+        </mark>
+      ) : (
+        part
+      )
+    )
   }
 
   // Parse timestamp entries for better display
@@ -129,21 +154,78 @@ ${transcript.timestamps.join('\n')}
     time: string
     text: string
     seconds: number
+    index: number
   }
 
   const parseTimestamps = (timestamps: string[]): TimestampEntry[] => {
-    return timestamps.map(ts => {
+    return timestamps.map((ts, index) => {
       // Match format like "[00:00:15] text" or "00:00:15 text"
       const match = ts.match(/\[?(\d{2}:\d{2}:\d{2})\]?\s*(.*)/)
       if (match) {
         const [, time, text] = match
         const [hours, minutes, seconds] = time.split(':').map(Number)
         const totalSeconds = hours * 3600 + minutes * 60 + seconds
-        return { time, text, seconds: totalSeconds }
+        return { time, text, seconds: totalSeconds, index }
       }
-      return { time: '00:00:00', text: ts, seconds: 0 }
+      return { time: '00:00:00', text: ts, seconds: 0, index }
     })
   }
+
+  // Filter and highlight search results
+  const filteredTimestamps = useMemo(() => {
+    if (!transcript) return []
+    const parsed = parseTimestamps(transcript.timestamps)
+    
+    if (!searchQuery.trim()) return parsed
+    
+    const query = searchQuery.toLowerCase()
+    const filtered = parsed.filter(entry => 
+      entry.text.toLowerCase().includes(query)
+    )
+    
+    // Update search matches for navigation
+    setSearchMatches(filtered.map(e => e.index))
+    
+    return filtered
+  }, [transcript, searchQuery])
+
+  const filteredCaptions = useMemo(() => {
+    if (!transcript) return []
+    const parsed = parseCaptions(transcript.captions)
+    
+    if (!searchQuery.trim()) return parsed
+    
+    const query = searchQuery.toLowerCase()
+    return parsed.filter(paragraph => 
+      paragraph.text.toLowerCase().includes(query)
+    )
+  }, [transcript, searchQuery])
+
+  // Navigate to next/previous search result
+  const navigateSearch = (direction: 'next' | 'prev') => {
+    if (searchMatches.length === 0) return
+    
+    if (direction === 'next') {
+      setSearchIndex((prev) => (prev + 1) % searchMatches.length)
+    } else {
+      setSearchIndex((prev) => (prev - 1 + searchMatches.length) % searchMatches.length)
+    }
+  }
+
+  // Scroll to search result
+  useEffect(() => {
+    if (searchQuery && searchMatches.length > 0 && transcript) {
+      const matchIndex = searchMatches[searchIndex]
+      const element = document.getElementById(`timestamp-${matchIndex}`)
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        element.classList.add('ring-2', 'ring-primary', 'ring-offset-2')
+        setTimeout(() => {
+          element.classList.remove('ring-2', 'ring-primary', 'ring-offset-2')
+        }, 2000)
+      }
+    }
+  }, [searchIndex, searchMatches, searchQuery, transcript])
 
   const jumpToTimestamp = (seconds: number) => {
     const youtubeUrl = `https://www.youtube.com/watch?v=${transcript?.video_id}&t=${seconds}s`
@@ -240,6 +322,32 @@ ${transcript.timestamps.join('\n')}
               </TabsList>
 
               <TabsContent value="captions" className="space-y-4">
+                {/* Search Input */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="Search in captions..."
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value)
+                      setSearchIndex(0)
+                    }}
+                    className="pl-9 pr-9 text-sm border-border/80 focus:border-primary/50"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => {
+                        setSearchQuery("")
+                        setSearchIndex(0)
+                        setSearchMatches([])
+                      }}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
                 <div className="flex justify-end">
                   <Button
                     variant="outline"
@@ -262,17 +370,71 @@ ${transcript.timestamps.join('\n')}
                 </div>
                 <div className="bg-muted/30 p-6 rounded-lg border border-border/40 text-foreground/80 max-h-[600px] overflow-y-auto">
                   <div className="space-y-4 text-base leading-relaxed">
-                    {parseCaptions(transcript.captions).map((paragraph, index) => (
+                    {filteredCaptions.map((paragraph, index) => (
                       <p key={index} className="text-foreground/90">
-                        {paragraph}
+                        {searchQuery ? highlightText(paragraph.text, searchQuery) : paragraph.text}
                       </p>
                     ))}
+                    {searchQuery && filteredCaptions.length === 0 && (
+                      <p className="text-center text-muted-foreground py-8">
+                        No matches found
+                      </p>
+                    )}
                   </div>
                 </div>
               </TabsContent>
 
               <TabsContent value="timestamps" className="space-y-4">
-                <div className="flex justify-end">
+                <div className="flex items-center justify-between gap-2">
+                  {/* Search Input */}
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="text"
+                      placeholder="Search in timestamps..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value)
+                        setSearchIndex(0)
+                      }}
+                      className="pl-9 pr-9 text-sm border-border/80 focus:border-primary/50"
+                    />
+                    {searchQuery && (
+                      <>
+                        <button
+                          onClick={() => {
+                            setSearchQuery("")
+                            setSearchIndex(0)
+                            setSearchMatches([])
+                          }}
+                          className="absolute right-10 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                        {searchMatches.length > 0 && (
+                          <div className="absolute right-12 top-1/2 transform -translate-y-1/2 flex items-center gap-1 text-xs text-muted-foreground">
+                            <button
+                              onClick={() => navigateSearch('prev')}
+                              className="p-1 hover:bg-primary/10 rounded"
+                              title="Previous match"
+                            >
+                              <ChevronUp className="h-3 w-3" />
+                            </button>
+                            <span className="px-1">
+                              {searchIndex + 1}/{searchMatches.length}
+                            </span>
+                            <button
+                              onClick={() => navigateSearch('next')}
+                              className="p-1 hover:bg-primary/10 rounded"
+                              title="Next match"
+                            >
+                              <ChevronDown className="h-3 w-3" />
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                   <Button
                     variant="outline"
                     size="sm"
@@ -293,9 +455,10 @@ ${transcript.timestamps.join('\n')}
                   </Button>
                 </div>
                 <div className="bg-muted/30 p-6 rounded-lg border border-border/40 space-y-1 max-h-[600px] overflow-y-auto">
-                  {parseTimestamps(transcript.timestamps).map((entry, index) => (
+                  {(searchQuery ? filteredTimestamps : parseTimestamps(transcript.timestamps)).map((entry) => (
                     <div
-                      key={index}
+                      key={entry.index}
+                      id={`timestamp-${entry.index}`}
                       onClick={() => jumpToTimestamp(entry.seconds)}
                       className="flex items-start gap-3 py-2 px-3 hover:bg-primary/10 rounded cursor-pointer transition-colors group"
                     >
@@ -303,10 +466,15 @@ ${transcript.timestamps.join('\n')}
                         {entry.time}
                       </span>
                       <span className="text-sm text-foreground/90 leading-relaxed flex-1">
-                        {entry.text}
+                        {searchQuery ? highlightText(entry.text, searchQuery) : entry.text}
                       </span>
                     </div>
                   ))}
+                  {searchQuery && filteredTimestamps.length === 0 && (
+                    <div className="text-center text-muted-foreground py-8">
+                      <p>No matches found</p>
+                    </div>
+                  )}
                 </div>
               </TabsContent>
             </Tabs>
